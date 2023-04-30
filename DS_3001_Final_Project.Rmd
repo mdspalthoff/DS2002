@@ -1,0 +1,149 @@
+---
+title: "DS_3001_Final_Project"
+author: "Matthew Spalthoff"
+date: "2023-04-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(tidyverse)
+library(caret)
+library(tidyverse)
+library(class)
+library(plotly)
+library(mice)
+library(MLmetrics)
+library(mltools)
+library(data.table)
+```
+
+```{r}
+music = read_csv("C:/Users/matth/OneDrive/Documents/UVA/Third Year/DS 3001/DS 3001/data/music.csv")
+
+music = music[,c(1,2,10,15:21,23:28,31,32,33)]
+music = subset(music, song.hotttnesss >= 0 & artist.terms_freq < 2)
+music[,c(11,14,18)] <- lapply(music[,c(11,14,18)], as.factor)
+
+target = music$song.hotttnesss
+
+music$song.hot.bin = cut(music$song.hotttnesss, breaks = c(-1, 0.5, 1.1), labels = c("not", "hot"))
+
+table(music$song.hot.bin_hot)
+
+music$song.hot.bin = as.factor(music$song.hot.bin)
+
+ab_c <- names(select_if(music, is.factor))
+
+music <- one_hot(as.data.table(music),cols=ab_c,sparsifyNAs = TRUE,naCols = FALSE,dropCols = TRUE,dropUnusedLevels = TRUE)
+
+target1 = music$song.hot.bin_hot
+
+music = music[,-c(10,37)]
+
+
+#sum(is.na(music))
+#str(music)
+#summary(music)
+```
+
+```{r}
+# knn
+
+part_index_1 <- createDataPartition(music$song.hot.bin_hot,
+                                           times=1,
+                                           p = 0.70,
+                                           groups=1,
+                                           list=FALSE)
+
+train <- music[part_index_1,]
+tune_and_test <- music[-part_index_1, ]
+
+tune_and_test_index <- createDataPartition(tune_and_test$song.hot.bin_hot,
+                                           p = .5,
+                                           list = FALSE,
+                                           times = 1)
+
+tune <- tune_and_test[tune_and_test_index, ]
+test <- tune_and_test[-tune_and_test_index, ]
+
+set.seed(1)
+music_9NN <-  knn(train = train,#<- training set cases
+               test = tune,    #<- tune set cases
+               cl = train$song.hot.bin_hot,#<- category for true classification
+               k = 7,#<- number of neighbors considered
+               use.all = TRUE,
+               prob = TRUE)# provides the output in probabilities 
+#music_9NN
+
+kNN_res = table(music_9NN,
+                tune$song.hot.bin_hot)
+
+kNN_acc = sum(kNN_res[row(kNN_res) == col(kNN_res)]) / sum(kNN_res)
+kNN_acc
+
+confusionMatrix(as.factor(music_9NN), as.factor(tune$song.hot.bin_hot), positive = "1", dnn=c("Prediction", "Actual"), mode = "sens_spec")
+```
+
+```{r}
+chooseK = function(k, train_set, val_set, train_class, val_class){
+  # Build knn with k neighbors considered.
+  set.seed(1)
+  class_knn = knn(train = train_set,    #<- training set cases
+                  test = val_set,       #<- test set cases
+                  cl = train_class,     #<- category for classification
+                  k = k,                #<- number of neighbors considered
+                  use.all = TRUE)       #<- control ties between class assignments
+                                        #   If true, all distances equal to the kth 
+                                        #   largest are included
+  conf_mat = table(class_knn, val_class)
+  
+  # Calculate the accuracy.
+  accu = sum(conf_mat[row(conf_mat) == col(conf_mat)]) / sum(conf_mat)                         
+  cbind(k = k, accuracy = accu)
+}
+
+knn_different_k = sapply(seq(1, 21, by = 2),  #<- set k to be odd number from 1 to 21
+                         function(x) chooseK(x, 
+                          train_set = train,
+                          val_set = tune,
+                          train_class = train$song.hot.bin_hot,
+                          val_class = tune$song.hot.bin_hot))
+
+View(knn_different_k)
+
+
+set.seed(1)
+music_15NN <-  knn(train = train,#<- training set cases
+               test = tune,    #<- tune set cases
+               cl = train$song.hot.bin_hot,#<- category for true classification
+               k = 15,#<- number of neighbors considered
+               use.all = TRUE,
+               prob = TRUE)# provides the output in probabilities 
+
+confusionMatrix(as.factor(music_15NN), as.factor(tune$song.hot.bin_hot), positive = "1", dnn=c("Prediction", "Actual"), mode = "sens_spec")
+```
+
+```{r}
+music_prob <- tibble(attr(music_15NN, "prob"))
+
+final_model <- tibble(k_prob=music_prob$`attr(music_15NN, "prob")`,pred=music_15NN,target=tune$song.hot.bin_hot)
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
